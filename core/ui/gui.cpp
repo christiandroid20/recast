@@ -53,6 +53,7 @@
 #include "settings.h"
 #include "oslib/i18n.h"
 #include "gui_font.h"
+#include "input_mode.h"
 using namespace i18n;
 
 #ifdef _WIN32
@@ -62,6 +63,7 @@ using namespace i18n;
 #endif
 #include <mutex>
 #include <algorithm>
+#include <cstdlib>
 
 bool game_started;
 
@@ -291,6 +293,9 @@ void gui_set_mouse_position(int x, int y, bool touchscreen)
 	mouseX = std::round(x * settings.display.pointScale);
 	mouseY = std::round(y * settings.display.pointScale);
 	mouseTouchscreen = touchscreen;
+	// Off-screen positions are used to signal "pointer left"; don't count them as activity
+	if (x >= 0 && y >= 0)
+		inputModeReport(touchscreen ? InputMode::Touch : InputMode::Pointer);
 }
 
 void gui_set_mouse_button(int button, bool pressed, bool touchscreen)
@@ -300,11 +305,14 @@ void gui_set_mouse_button(int button, bool pressed, bool touchscreen)
 	else
 		mouseButtons &= ~(1 << button);
 	mouseTouchscreen = touchscreen;
+	if (pressed)
+		inputModeReport(touchscreen ? InputMode::Touch : InputMode::Pointer);
 }
 
 void gui_set_mouse_wheel(float delta) {
 	mouseWheel += delta;
 	mouseTouchscreen = false;
+	inputModeReport(InputMode::Pointer);
 }
 
 static void gui_newFrame()
@@ -339,6 +347,17 @@ static void gui_newFrame()
 	io.AddKeyEvent(ImGuiKey_GamepadDpadRight, ((kcode[0] & DC_DPAD_RIGHT) == 0));
 	io.AddKeyEvent(ImGuiKey_GamepadDpadUp, ((kcode[0] & DC_DPAD_UP) == 0));
 	io.AddKeyEvent(ImGuiKey_GamepadDpadDown, ((kcode[0] & DC_DPAD_DOWN) == 0));
+	io.AddKeyEvent(ImGuiKey_GamepadStart, ((kcode[0] & DC_BTN_START) == 0));
+
+	if (gui_is_open())
+	{
+		// Switch the UI to gamepad mode as soon as a pad is used (USB or Bluetooth).
+		// Active-low bits: a cleared bit means the button is pressed.
+		constexpr u32 padMask = DC_BTN_A | DC_BTN_B | DC_BTN_X | DC_BTN_Y | DC_BTN_START
+				| DC_DPAD_LEFT | DC_DPAD_RIGHT | DC_DPAD_UP | DC_DPAD_DOWN;
+		if ((kcode[0] & padMask) != padMask || std::abs((int)joyx[0]) > 16384 || std::abs((int)joyy[0]) > 16384)
+			inputModeReport(InputMode::Gamepad);
+	}
 
 	float analog;
 	analog = joyx[0] < 0 ? -(float)joyx[0] / 32768.f : 0.f;
@@ -457,6 +476,12 @@ void gui_start_game(const std::string& path)
 	if (gui_state != GuiState::Main && gui_state != GuiState::Closed && gui_state != GuiState::Commands
 			&& gui_state != GuiState::Pause)
 		return;
+	// Remember the last game picked from the game list for "auto-start last game"
+	if (gui_state == GuiState::Main && !path.empty() && config::LastGamePath.get() != path)
+	{
+		config::LastGamePath = path;
+		SaveSettings();
+	}
 	emu.unloadGame();
 	reset_vmus();
     chat.reset();
@@ -882,6 +907,17 @@ static void gui_display_content()
 
     ImGui::Begin("##main", nullptr, ImGuiWindowFlags_NoDecoration);
 
+	// Layout adapts to the last input used: bigger cards and a button hint bar for gamepads
+	const bool padMode = inputModeIsGamepad();
+	if (padMode)
+	{
+		// Start opens the settings, B closes the disk selection
+		if (gui_state == GuiState::Main && ImGui::IsKeyPressed(ImGuiKey_GamepadStart, false))
+			gui_setState(GuiState::Settings);
+		else if (gui_state == GuiState::SelectDisk && ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false))
+			gui_setState(GuiState::Commands);
+	}
+
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ScaledVec2(20, 8));
     ImGui::AlignTextToFramePadding();
     ImGui::Indent(uiScaled(10));
@@ -928,10 +964,14 @@ static void gui_display_content()
     scanner.fetch_game_list();
 
 	// Only if Filter and Settings aren't focused... ImGui::SetNextWindowFocus();
-	ImGui::BeginChild(ImGui::GetID("library"), ImVec2(0, 0), ImGuiChildFlags_Borders | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_DragScrolling);
+	// Reserve a line at the bottom for the button hints in gamepad mode
+	const float hintBarHeight = padMode ? ImGui::GetFrameHeightWithSpacing() : 0.f;
+	bool firstItem = true;
+	ImGui::BeginChild(ImGui::GetID("library"), ImVec2(0, -hintBarHeight), ImGuiChildFlags_Borders | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_DragScrolling);
     {
 		const float totalWidth = ImGui::GetContentRegionMax().x - (!ImGui::GetCurrentWindow()->ScrollbarY ? ImGui::GetStyle().ScrollbarSize : 0);
-		const int itemsPerLine = std::max<int>(totalWidth / (uiScaled(150) + ImGui::GetStyle().ItemSpacing.x), 1);
+		// Bigger cards for gamepad mode (TV viewing distance)
+		const int itemsPerLine = std::max<int>(totalWidth / (uiScaled(padMode ? 210 : 150) + ImGui::GetStyle().ItemSpacing.x), 1);
 		const float responsiveBoxSize = totalWidth / itemsPerLine - ImGui::GetStyle().FramePadding.x * 2;
 		const ImVec2 responsiveBoxVec2 = ImVec2(responsiveBoxSize, responsiveBoxSize);
 
@@ -981,6 +1021,12 @@ static void gui_display_content()
 					}
 					else {
 						pressed = ImGui::Selectable(gameName.c_str());
+					}
+					if (firstItem)
+					{
+						// Start with the first game focused so gamepad navigation has an anchor
+						ImGui::SetItemDefaultFocus();
+						firstItem = false;
 					}
 					if (pressed)
 					{
@@ -1037,6 +1083,17 @@ static void gui_display_content()
     scrollWhenDraggingOnVoid();
     windowDragScroll();
 	ImGui::EndChild();
+	if (padMode)
+	{
+		// Button hints (gamepad mode only)
+		ImGui::Indent(uiScaled(10));
+		ImGui::AlignTextToFramePadding();
+		if (gui_state == GuiState::SelectDisk)
+			ImGui::TextDisabled("A  %s      B  %s", T("Select"), T("Cancel"));
+		else
+			ImGui::TextDisabled("A  %s      Start  %s", T("Play"), T("Settings"));
+		ImGui::Unindent(uiScaled(10));
+	}
 	ImGui::End();
 
     contentpath_warning_popup();
@@ -1342,6 +1399,17 @@ void gui_display_ui()
 			else
 				gui_start_game(settings.content.path);
 			return;
+		}
+		// Auto-start the last game, once per app run (not when coming back from a game)
+		static bool autoStartDone = false;
+		if (!autoStartDone)
+		{
+			autoStartDone = true;
+			if (config::AutoStartLastGame && !config::LastGamePath.get().empty())
+			{
+				gui_start_game(config::LastGamePath.get());
+				return;
+			}
 		}
 	}
 

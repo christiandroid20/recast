@@ -18,12 +18,17 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.flycast.emulator"
+        applicationId = "com.recast.emulator"
         minSdk = 21
         targetSdk = 36
         versionCode = 8
         versionName = gitVersionName()
         vectorDrawables.useSupportLibrary = true
+
+        ndk {
+            // 32-bit ARM first: many Android TV boxes (e.g. Mi Box S) run a 32-bit userspace.
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
 
         externalNativeBuild {
             cmake {

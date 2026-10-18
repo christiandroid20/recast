@@ -507,6 +507,8 @@ extern Option<std::string, false> BoxartPath;
 extern Option<std::vector<std::string>, false> MappingsPath;
 extern Option<std::vector<std::string>, false> CheatPath;
 extern Option<bool, false> HideLegacyNaomiRoms;
+extern Option<bool, false> AutoStartLastGame;
+extern Option<std::string, false> LastGamePath;
 extern Option<bool, false> UploadCrashLogs;
 extern Option<bool, false> DiscordPresence;
 #if defined(__ANDROID__) && !defined(LIBRETRO)

@@ -19,6 +19,7 @@
 #include "android_gamepad.h"
 #include "android_keyboard.h"
 #include "ui/vgamepad.h"
+#include "ui/input_mode.h"
 #include "cfg/option.h"
 #include "hw/maple/maple_if.h"
 
@@ -120,6 +121,8 @@ extern "C" JNIEXPORT void JNICALL Java_com_flycast_emulator_periph_InputDeviceMa
 			touchMouse = std::make_shared<TouchMouse>();
 			GamepadDevice::Register(touchMouse);
 		}
+		// The device has a touchscreen: start in touch mode until a gamepad is used
+		inputModeSetDefault(InputMode::Touch);
 	}
 	else
 	{

@@ -1,0 +1,3 @@
+# Keep shell scripts and brand settings with LF endings so they run on the Linux CI runner
+branding/*.sh text eol=lf
+branding/brand.conf text eol=lf

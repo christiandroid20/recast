@@ -14,6 +14,8 @@ if(NOT LIBRETRO)
             gui_cheats.cpp
             gui_util.cpp
             gui_util.h
+            input_mode.cpp
+            input_mode.h
             mainui.cpp
             mainui.h
             settings.cpp

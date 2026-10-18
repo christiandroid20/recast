@@ -367,6 +367,8 @@ void gui_settings_general()
 			T("Display game cover art in the game list."));
 	OptionCheckbox(T("Fetch Box Art"), config::FetchBoxart,
 			T("Fetch cover images from TheGamesDB.net."));
+	OptionCheckbox(T("Auto-start Last Game"), config::AutoStartLastGame,
+			T("Launch the last game you played when the app starts."));
 	if (OptionSlider(T("UI Scaling"), config::UIScaling, 50, 200, T("Adjust the size of UI elements and fonts."), "%d%%"))
 		uiUserScaleUpdated = true;
 	if (uiUserScaleUpdated)
