@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository with submodules
+      - name: Checkout repository with submodules (Recursive)
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -23,14 +23,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libcurl4-openssl-dev libgl1-mesa-dev libevdev-dev
 
-      - name: Clean Previous Builds and Apply Recast v1.0 Overhaul
+      - name: Execute Local Clean and Branding Script
         run: |
-          python3 auto_clean_patch.py
+          python3 clean_and_patch.py
 
-      - name: Configure CMake
+      - name: Configure CMake (Standalone & GUI Enabled)
         run: |
           cmake -B build -DLIBRETRO=OFF -DENABLE_GUI=ON -DCMAKE_BUILD_TYPE=Release
 
-      - name: Build Recast v1.0
+      - name: Build Recast v1.0 Clean
         run: |
           cmake --build build --config Release --clean-first

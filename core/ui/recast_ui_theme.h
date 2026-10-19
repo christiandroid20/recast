@@ -23,7 +23,6 @@ inline void ApplyRecastTheme() {
     style.FramePadding             = ImVec2(12.0f, 8.0f);
     style.ItemSpacing              = ImVec2(16.0f, 16.0f);
     style.ItemInnerSpacing         = ImVec2(10.0f, 10.0f);
-    style.TouchExtraPadding        = ImVec2(0.0f, 0.0f);
     style.IndentSpacing            = 20.0f;
     style.ScrollbarSize            = 12.0f;
     style.GrabMinSize              = 12.0f;
@@ -83,7 +82,6 @@ inline void RenderRecastGameGrid(const std::vector<RecastGameItem>& games) {
         
         ImGui::BeginChild("GameCard", ImVec2(cardWidth, cardHeight), true, ImGuiWindowFlags_NoScrollbar);
         
-        // Cover Art / Save State Thumbnail Container
         ImGui::Button(" [ PORTADA / SAVE STATE ] ", ImVec2(cardWidth - 16.0f, 180.0f));
         
         ImGui::Spacing();
