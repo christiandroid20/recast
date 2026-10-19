@@ -276,7 +276,8 @@ public class AndroidStorage {
             else
                 intent.setType("application/*");
         }
-        intent = Intent.createChooser(intent, description);
+        // Launch the Storage Access Framework picker directly. Wrapping ACTION_OPEN_DOCUMENT_TREE
+        // in a chooser can leave Android TV devices with an empty chooser instead of the folder UI.
         storageIntentPerms = Intent.FLAG_GRANT_READ_URI_PERMISSION | (writeAccess ? Intent.FLAG_GRANT_WRITE_URI_PERMISSION : 0);
         intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | storageIntentPerms);
         try {
