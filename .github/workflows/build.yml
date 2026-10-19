@@ -1,4 +1,4 @@
-name: Build Recast v1.0
+name: Auto Clean & Build Recast v1.0
 
 on:
   push:
@@ -14,13 +14,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Apply Recast v1.0 Branding and UI Overhaul
+      - name: Clean Previous Builds and Apply Recast v1.0 Overhaul
         run: |
-          python3 apply_recast_v1.py
+          python3 auto_clean_patch.py
 
-      - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Configure CMake (Forced Standalone & GUI Enabled)
+        run: |
+          cmake -B build -DLIBRETRO=OFF -DENABLE_GUI=ON -DCMAKE_BUILD_TYPE=Release
 
       - name: Build Recast v1.0
-        run: cmake --build build --config Release
+        run: |
+          cmake --build build --config Release --clean-first
