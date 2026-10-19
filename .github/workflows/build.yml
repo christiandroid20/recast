@@ -1,4 +1,4 @@
-name: Auto Clean & Build Recast v1.0
+name: Build Recast v1.0
 
 on:
   push:
@@ -12,16 +12,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repository with submodules
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libcurl4-openssl-dev libgl1-mesa-dev libevdev-dev
 
       - name: Clean Previous Builds and Apply Recast v1.0 Overhaul
         run: |
           python3 auto_clean_patch.py
 
-      - name: Configure CMake (Forced Standalone & GUI Enabled)
+      - name: Configure CMake
         run: |
           cmake -B build -DLIBRETRO=OFF -DENABLE_GUI=ON -DCMAKE_BUILD_TYPE=Release
 
