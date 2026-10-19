@@ -25,6 +25,7 @@ import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
@@ -333,6 +334,18 @@ public class AndroidStorage {
         // in a chooser can leave Android TV devices with an empty chooser instead of the folder UI.
         storageIntentPerms = Intent.FLAG_GRANT_READ_URI_PERMISSION | (writeAccess ? Intent.FLAG_GRANT_WRITE_URI_PERMISSION : 0);
         intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | storageIntentPerms);
+
+        // Android TV builds sometimes ship without a working document-picker UI.
+        // Use Recast's D-pad browser directly on TV instead of opening a blank system screen.
+        if (activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
+            Intent fallback = new Intent(activity, TvStoragePickerActivity.class);
+            fallback.putExtra(TvStoragePickerActivity.EXTRA_DIRECTORY, isDirectory);
+            fallback.putExtra(TvStoragePickerActivity.EXTRA_DESCRIPTION, description == null ? "" : description);
+            fallback.putExtra(TvStoragePickerActivity.EXTRA_MIME_TYPE, mimeType == null ? "" : mimeType);
+            activity.startActivityForResult(fallback, ADD_STORAGE_ACTIVITY_REQUEST);
+            return true;
+        }
+
         try {
             activity.startActivityForResult(intent, ADD_STORAGE_ACTIVITY_REQUEST);
         } catch (ActivityNotFoundException aex) {
