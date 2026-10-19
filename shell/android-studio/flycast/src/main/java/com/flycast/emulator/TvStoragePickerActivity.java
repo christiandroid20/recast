@@ -162,7 +162,7 @@ public final class TvStoragePickerActivity extends Activity {
         for (File dir : sorted) {
             visibleFiles.add(dir);
             String label = dir.getAbsolutePath();
-            if (label.equals(internal.getAbsolutePath())) label += "  (Interno)";
+            if (internal != null && label.equals(internal.getAbsolutePath())) label += "  (Interno)";
             else if (label.startsWith("/storage/") && !label.contains("/emulated/")) label += "  (USB / SD)";
             visibleLabels.add("📁  " + label);
         }
