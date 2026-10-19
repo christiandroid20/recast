@@ -1,0 +1,58 @@
+name: Recast Android
+
+on:
+  push:
+    branches-ignore:
+      - 'l10n_**'
+  pull_request:
+
+jobs:
+  build:
+    name: Android
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up build environment
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install ccache cmake libcurl4-openssl-dev ninja-build
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.ccache
+          key: android-ccache-${{ github.sha }}
+          restore-keys: android-ccache-
+            
+      - name: Disable release signing
+        run: sed -i 's/signingConfigs.getByName("release")/signingConfigs.getByName("debug")/g' shell/android-studio/flycast/build.gradle.kts
+        if: github.repository != 'flyinghead/flycast' || github.event_name != 'push'
+
+      - name: Bump version code
+        uses: chkfung/android-version-actions@v1.2.2
+        with:
+          gradlePath: shell/android-studio/flycast/build.gradle.kts
+          versionCode: ${{ github.run_number }}
+
+      - name: Gradle
+        working-directory: shell/android-studio
+        run: ./gradlew assembleRelease bundleRelease --parallel
+        env:
+          SENTRY_UPLOAD_URL: ${{ secrets.SENTRY_UPLOAD_URL }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: recast-android-release
+          path: shell/android-studio/flycast/build/outputs/apk/release/flycast-release.apk
+
