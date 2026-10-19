@@ -54,6 +54,11 @@
 
         <meta-data android:name="android.max_aspect" android:value="2.1" />
         <activity
+            android:name="com.flycast.emulator.TvStoragePickerActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+        <activity
             android:name="com.flycast.emulator.NativeGLActivity"
             android:configChanges="orientation|navigation|screenSize|screenLayout|uiMode|keyboard|keyboardHidden"
             android:screenOrientation="sensorLandscape"

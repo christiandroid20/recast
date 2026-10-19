@@ -25,6 +25,7 @@ import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
@@ -78,7 +79,8 @@ public class AndroidStorage {
         }
         else {
             try {
-                activity.getContentResolver().takePersistableUriPermission(uri, storageIntentPerms);
+                if ("content".equalsIgnoreCase(uri.getScheme()))
+                    activity.getContentResolver().takePersistableUriPermission(uri, storageIntentPerms);
             } catch (SecurityException e) {
                 Log.w("Flycast", "takePersistableUriPermission failed", e);
                 AlertDialog.Builder dlgAlert  = new AlertDialog.Builder(activity);
@@ -101,15 +103,25 @@ public class AndroidStorage {
     }
 
     public int openFile(String uri, String mode) throws FileNotFoundException {
-        ParcelFileDescriptor pfd = activity.getContentResolver().openFileDescriptor(Uri.parse(uri), mode);
+        Uri parsed = Uri.parse(uri);
+        ParcelFileDescriptor pfd;
+        if ("file".equalsIgnoreCase(parsed.getScheme()))
+            pfd = ParcelFileDescriptor.open(new File(parsed.getPath()), ParcelFileDescriptor.MODE_READ_ONLY);
+        else
+            pfd = activity.getContentResolver().openFileDescriptor(parsed, mode);
         return pfd.detachFd();
     }
 
     public InputStream openInputStream(String uri) throws FileNotFoundException {
-        return activity.getContentResolver().openInputStream(Uri.parse(uri));
+        Uri parsed = Uri.parse(uri);
+        if ("file".equalsIgnoreCase(parsed.getScheme()))
+            return new java.io.FileInputStream(new File(parsed.getPath()));
+        return activity.getContentResolver().openInputStream(parsed);
     }
     public OutputStream openOutputStream(String parent, String name) throws FileNotFoundException {
         Uri uri = Uri.parse(parent);
+        if ("file".equalsIgnoreCase(uri.getScheme()))
+            return new FileOutputStream(new File(new File(uri.getPath()), name));
         String subpath = getSubPath(parent, name);
         if (!exists(subpath)) {
             String documentId;
@@ -130,6 +142,22 @@ public class AndroidStorage {
     public FileInfo[] listContent(String uri)
     {
         Uri treeUri = Uri.parse(uri);
+        if ("file".equalsIgnoreCase(treeUri.getScheme())) {
+            File[] children = new File(treeUri.getPath()).listFiles();
+            if (children == null) return new FileInfo[0];
+            ArrayList<FileInfo> files = new ArrayList<>();
+            for (File child : children) {
+                FileInfo info = new FileInfo();
+                info.setPath(Uri.fromFile(child).toString());
+                info.setName(child.getName());
+                info.setDirectory(child.isDirectory());
+                info.setSize(child.length());
+                info.setWritable(child.canWrite());
+                info.setUpdateTime(child.lastModified() / 1000);
+                files.add(info);
+            }
+            return files.toArray(new FileInfo[files.size()]);
+        }
         String documentId;
         if (DocumentsContract.isDocumentUri(activity, treeUri))
             documentId = DocumentsContract.getDocumentId(treeUri);
@@ -176,6 +204,11 @@ public class AndroidStorage {
     public String getParentUri(String uriString) throws FileNotFoundException {
         if (uriString.isEmpty())
             return "";
+        Uri parsedUri = Uri.parse(uriString);
+        if ("file".equalsIgnoreCase(parsedUri.getScheme())) {
+            File parent = new File(parsedUri.getPath()).getParentFile();
+            return parent == null ? "" : Uri.fromFile(parent).toString();
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
                 Uri uri = Uri.parse(uriString);
@@ -200,6 +233,8 @@ public class AndroidStorage {
     public String getSubPath(String reference, String relative)
     {
         Uri refUri = Uri.parse(reference);
+        if ("file".equalsIgnoreCase(refUri.getScheme()))
+            return Uri.fromFile(new File(new File(refUri.getPath()), relative)).toString();
         String docId;
         if (DocumentsContract.isDocumentUri(activity, refUri))
             docId = DocumentsContract.getDocumentId(refUri);
@@ -211,6 +246,18 @@ public class AndroidStorage {
     public FileInfo getFileInfo(String uriString) throws FileNotFoundException
     {
         Uri uri = Uri.parse(uriString);
+        if ("file".equalsIgnoreCase(uri.getScheme())) {
+            File file = new File(uri.getPath());
+            if (!file.exists()) throw new FileNotFoundException(uriString);
+            FileInfo info = new FileInfo();
+            info.setPath(uriString);
+            info.setName(file.getName().isEmpty() ? file.getAbsolutePath() : file.getName());
+            info.setDirectory(file.isDirectory());
+            info.setSize(file.length());
+            info.setWritable(file.canWrite());
+            info.setUpdateTime(file.lastModified() / 1000);
+            return info;
+        }
         DocumentFile docFile = null;
         if (DocumentsContract.isDocumentUri(activity, uri))
             docFile = DocumentFile.fromSingleUri(activity, uri);
@@ -232,6 +279,8 @@ public class AndroidStorage {
     public boolean exists(String uriString)
     {
         Uri uri = Uri.parse(uriString);
+        if ("file".equalsIgnoreCase(uri.getScheme()))
+            return new File(uri.getPath()).exists();
         if (!DocumentsContract.isDocumentUri(activity, uri))
         {
             String documentId = DocumentsContract.getTreeDocumentId(uri);
@@ -254,6 +303,11 @@ public class AndroidStorage {
     public String mkdir(String parent, String name) throws FileNotFoundException
     {
         Uri parentUri = Uri.parse(parent);
+        if ("file".equalsIgnoreCase(parentUri.getScheme())) {
+            File dir = new File(new File(parentUri.getPath()), name);
+            if (!dir.mkdirs() && !dir.isDirectory()) throw new FileNotFoundException(dir.getAbsolutePath());
+            return Uri.fromFile(dir).toString();
+        }
         if (!DocumentsContract.isDocumentUri(activity, parentUri)) {
             String documentId = DocumentsContract.getTreeDocumentId(parentUri);
             parentUri = DocumentsContract.buildDocumentUriUsingTree(parentUri, documentId);
@@ -280,30 +334,27 @@ public class AndroidStorage {
         // in a chooser can leave Android TV devices with an empty chooser instead of the folder UI.
         storageIntentPerms = Intent.FLAG_GRANT_READ_URI_PERMISSION | (writeAccess ? Intent.FLAG_GRANT_WRITE_URI_PERMISSION : 0);
         intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | storageIntentPerms);
+
+        // Android TV builds sometimes ship without a working document-picker UI.
+        // Use Recast's D-pad browser directly on TV instead of opening a blank system screen.
+        if (activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
+            Intent fallback = new Intent(activity, TvStoragePickerActivity.class);
+            fallback.putExtra(TvStoragePickerActivity.EXTRA_DIRECTORY, isDirectory);
+            fallback.putExtra(TvStoragePickerActivity.EXTRA_DESCRIPTION, description == null ? "" : description);
+            fallback.putExtra(TvStoragePickerActivity.EXTRA_MIME_TYPE, mimeType == null ? "" : mimeType);
+            activity.startActivityForResult(fallback, ADD_STORAGE_ACTIVITY_REQUEST);
+            return true;
+        }
+
         try {
             activity.startActivityForResult(intent, ADD_STORAGE_ACTIVITY_REQUEST);
         } catch (ActivityNotFoundException aex) {
-            Log.w("flycast", "Unable to start file/folder picker", aex);
-            activity.runOnUiThread(new Runnable() {
-                public void run() {
-                    String message;
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-                        // Android 10+ requires SAF
-                        message = getResString(R.string.no_file_manager_android10);
-                    else
-                        message = getResString(R.string.no_file_manager_android9);
-                    new AlertDialog.Builder(activity)
-                            .setTitle(R.string.file_manager_not_found)
-                            .setMessage(message)
-                            .setPositiveButton(R.string.OK, new DialogInterface.OnClickListener() {
-                                @Override
-                                public void onClick(DialogInterface dialog, int id) {
-                                    addStorageCallback(null);
-                                }
-                            })
-                            .show();
-                }
-            });
+            Log.w("flycast", "System document picker unavailable; opening Recast TV file browser", aex);
+            Intent fallback = new Intent(activity, TvStoragePickerActivity.class);
+            fallback.putExtra(TvStoragePickerActivity.EXTRA_DIRECTORY, isDirectory);
+            fallback.putExtra(TvStoragePickerActivity.EXTRA_DESCRIPTION, description == null ? "" : description);
+            fallback.putExtra(TvStoragePickerActivity.EXTRA_MIME_TYPE, mimeType == null ? "" : mimeType);
+            activity.startActivityForResult(fallback, ADD_STORAGE_ACTIVITY_REQUEST);
         }
 
         return true;
